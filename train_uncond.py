@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
-import datetime
-import glob
-import os
 from prefigure.prefigure import get_all_args, push_wandb_config
 from contextlib import contextmanager
 from copy import deepcopy
 import math
 from pathlib import Path
+import glob
+import os
+from datetime import datetime
 
 import sys
 import torch
