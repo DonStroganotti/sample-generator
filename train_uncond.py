@@ -225,7 +225,7 @@ def main():
     wandb_logger = pl.loggers.WandbLogger(project=args.name)
 
     exc_callback = ExceptionCallback()
-    batch_end_callback = BatchEndCLeanupCallback()
+    batch_end_callback = BatchEndCLeanupCallback(args)
     ckpt_callback = pl.callbacks.ModelCheckpoint(every_n_train_steps=args.checkpoint_every, save_top_k=-1, dirpath=save_path)
     demo_callback = DemoCallback(args)
 
