@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+import datetime
+import glob
+import os
 from prefigure.prefigure import get_all_args, push_wandb_config
 from contextlib import contextmanager
 from copy import deepcopy
@@ -137,6 +140,23 @@ class ExceptionCallback(pl.Callback):
     def on_exception(self, trainer, module, err):
         print(f'{type(err).__name__}: {err}', file=sys.stderr)
 
+class BatchEndCLeanupCallback(pl.Callback):
+    def __init__(self, global_args):
+        super().__init__()
+        self.save_path = global_args.save_path
+
+    def on_train_batch_end(self, trainer, module, outputs, batch, batch_idx):
+        list_of_files = glob.glob(f'{self.save_path}/*poch*step*.ckpt')
+        if not list_of_files:
+            return
+        full_path = [("{0}".format(x)).replace('//','/') for x in list_of_files]
+        if len(list_of_files) > 1:
+            oldest_file = min(full_path, key=os.path.getctime)
+            print('\nremoving', oldest_file)
+            os.unlink(oldest_file)
+            now = datetime.utcnow()
+            current_time = now.strftime("%H:%M:%S")
+            print(len(list_of_files) -1, 'checkpoints left', list_of_files[0], 'at', current_time)
 
 class DemoCallback(pl.Callback):
     def __init__(self, global_args):
@@ -192,15 +212,20 @@ def main():
     save_path = None if args.save_path == "" else args.save_path
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print('Using device:', device)
-    torch.manual_seed(args.seed)
+    print("train_set:")
 
+    #print('Using device:', device)
+    torch.manual_seed(args.seed)
+    
+    
     train_set = SampleDataset([args.training_dir], args)
+    
     train_dl = data.DataLoader(train_set, args.batch_size, shuffle=True,
                                num_workers=args.num_workers, persistent_workers=True, pin_memory=True)
     wandb_logger = pl.loggers.WandbLogger(project=args.name)
 
     exc_callback = ExceptionCallback()
+    batch_end_callback = BatchEndCLeanupCallback()
     ckpt_callback = pl.callbacks.ModelCheckpoint(every_n_train_steps=args.checkpoint_every, save_top_k=-1, dirpath=save_path)
     demo_callback = DemoCallback(args)
 
@@ -216,7 +241,7 @@ def main():
         # strategy='ddp',
         precision=16,
         accumulate_grad_batches=args.accum_batches, 
-        callbacks=[ckpt_callback, demo_callback, exc_callback],
+        callbacks=[ckpt_callback, batch_end_callback, demo_callback, exc_callback],
         logger=wandb_logger,
         log_every_n_steps=1,
         max_epochs=10000000,
